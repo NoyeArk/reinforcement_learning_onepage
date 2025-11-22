@@ -243,11 +243,15 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
         } else if (obstacles.includes(stateStr)) {
             color = '#757575'; // 灰色 - 障碍物
         } else if (V) {
-            // 根据值函数着色
+            // 根据值函数着色：值越高越接近绿色
             const normalized = (V[state] - minV) / (maxV - minV || 1);
-            const r = Math.floor(100 + normalized * 155);
-            const g = Math.floor(200 + normalized * 55);
-            const b = Math.floor(255);
+            // 从浅色渐变到绿色：值低时接近白色/浅黄色，值高时接近绿色
+            // r: 从255降到较低值（绿色时r较小）
+            // g: 从较低值到255（绿色时g最大）
+            // b: 从较高值降到较低值（绿色时b较小）
+            const r = Math.floor(255 - normalized * 180); // 255 -> 75 (更绿)
+            const g = Math.floor(220 + normalized * 35);   // 220 -> 255 (更绿)
+            const b = Math.floor(220 - normalized * 170); // 220 -> 50 (更绿)
             color = `rgb(${r}, ${g}, ${b})`;
         }
         
