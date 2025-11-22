@@ -11,6 +11,20 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('gamma').addEventListener('input', function(e) {
         document.getElementById('gammaValue').textContent = parseFloat(e.target.value).toFixed(2);
     });
+    
+    // 初始化Canvas，显示一个提示信息
+    const canvas = document.getElementById('gridCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#666';
+        ctx.font = '20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('请点击"创建环境"按钮开始', canvas.width / 2, canvas.height / 2);
+    }
 });
 
 // 创建环境（确保是全局函数）
@@ -48,12 +62,22 @@ window.createEnvironment = async function() {
             console.log('State positions:', data.env.state_positions);
             console.log('Initial policy:', data.env.initial_policy);
             
-            updateStateInfo(data.env);
             // 显示初始策略
             const initialPolicy = data.env.initial_policy ? Object.fromEntries(
                 Object.entries(data.env.initial_policy).map(([k, v]) => [parseInt(k), v])
             ) : null;
-            drawGrid(data.env, null, initialPolicy, true);
+            
+            // 立即绘制网格
+            console.log('Drawing grid with initial policy...');
+            console.log('Environment data:', JSON.stringify(data.env, null, 2));
+            console.log('Initial policy:', initialPolicy);
+            
+            // 使用 setTimeout 确保 DOM 已更新
+            setTimeout(() => {
+                drawGrid(data.env, null, initialPolicy, true);
+            }, 100);
+            
+            // 更新状态信息
             document.getElementById('stateInfo').innerHTML = `
                 <p><strong>状态数:</strong> ${data.env.n_states}</p>
                 <p><strong>终端状态:</strong> ${data.env.terminal_states.join(', ')}</p>
@@ -61,6 +85,9 @@ window.createEnvironment = async function() {
                 <p><strong>初始策略:</strong> 已随机生成（见网格中的蓝色箭头）</p>
             `;
             document.getElementById('canvasTitle').textContent = '网格世界环境（初始随机策略）';
+            
+            // 隐藏迭代信息（因为还没有运行算法）
+            document.getElementById('iterationInfo').style.display = 'none';
         } else {
             alert('创建环境失败: ' + data.error);
         }
@@ -125,9 +152,24 @@ window.runAlgorithm = async function() {
 // 绘制网格
 function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
     const canvas = document.getElementById('gridCanvas');
+    if (!canvas) {
+        console.error('Canvas element not found!');
+        return;
+    }
+    
     const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        console.error('Could not get 2D context!');
+        return;
+    }
+    
     const width = parseInt(env.width);
     const height = parseInt(env.height);
+    
+    if (!width || !height || width <= 0 || height <= 0) {
+        console.error('Invalid grid dimensions:', width, height);
+        return;
+    }
     
     // 动态调整Canvas大小，确保每个单元格至少80x80像素
     const minCellSize = 80;
@@ -142,7 +184,7 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
     canvas.style.width = canvasWidth + 'px';
     canvas.style.height = canvasHeight + 'px';
     
-    console.log(`Canvas size: ${canvasWidth}x${canvasHeight}, cell size: ${canvasWidth/width}x${canvasHeight/height}`);
+    console.log(`Drawing grid: ${width}x${height}, Canvas: ${canvasWidth}x${canvasHeight}, States: ${env.n_states}`);
     
     // 计算单元格大小
     const cellWidth = canvas.width / width;
@@ -160,6 +202,11 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
     
     // 绘制每个单元格
     console.log(`Drawing grid: ${width}x${height}, total states: ${env.n_states}`);
+    console.log('State positions:', env.state_positions);
+    console.log('Terminal states:', env.terminal_states);
+    console.log('Obstacles:', env.obstacles);
+    console.log('Policy:', policy);
+    
     let drawnCount = 0;
     for (let state = 0; state < env.n_states; state++) {
         try {
@@ -180,7 +227,7 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
             
             // 确保坐标在Canvas范围内
             if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
-                console.warn(`State ${state} out of bounds: x=${x}, y=${y}`);
+                console.warn(`State ${state} out of bounds: x=${x}, y=${y}, row=${row}, col=${col}`);
                 continue;
             }
         
@@ -287,9 +334,20 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
             }
         }
         
-        drawnCount++;
+            drawnCount++;
+        } catch (error) {
+            console.error(`Error drawing state ${state}:`, error);
+        }
     }
     console.log(`Drawn ${drawnCount} out of ${env.n_states} states`);
+    
+    // 确保Canvas是可见的
+    if (canvas.style.display === 'none') {
+        canvas.style.display = 'block';
+    }
+    if (canvas.style.visibility === 'hidden') {
+        canvas.style.visibility = 'visible';
+    }
 }
 
 // 更新控制按钮
