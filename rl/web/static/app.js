@@ -239,19 +239,18 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
         const obstacles = env.obstacles ? env.obstacles.map(s => String(s)) : [];
         
         if (terminalStates.includes(stateStr)) {
-            color = '#4CAF50'; // 绿色 - 终端状态
+            color = '#4CAF50'; // 绿色 - 终端状态（目标区域）
         } else if (obstacles.includes(stateStr)) {
             color = '#757575'; // 灰色 - 障碍物
         } else if (V) {
-            // 根据值函数着色：值越高越接近绿色
+            // 根据值函数着色：分数最低为白色，分数越高越接近绿色
             const normalized = (V[state] - minV) / (maxV - minV || 1);
-            // 从浅色渐变到绿色：值低时接近白色/浅黄色，值高时接近绿色
-            // r: 从255降到较低值（绿色时r较小）
-            // g: 从较低值到255（绿色时g最大）
-            // b: 从较高值降到较低值（绿色时b较小）
-            const r = Math.floor(255 - normalized * 180); // 255 -> 75 (更绿)
-            const g = Math.floor(220 + normalized * 35);   // 220 -> 255 (更绿)
-            const b = Math.floor(220 - normalized * 170); // 220 -> 50 (更绿)
+            // 从白色渐变到绿色：normalized=0时为白色(255,255,255)，normalized=1时接近绿色
+            // r和b: 从255降到较低值（绿色时r和b较小）
+            // g: 保持255（绿色通道最大）
+            const r = Math.floor(255 - normalized * 155); // 255 -> 100 (浅绿色)
+            const g = Math.floor(255);                    // 255 (保持高绿色)
+            const b = Math.floor(255 - normalized * 155); // 255 -> 100 (浅绿色)
             color = `rgb(${r}, ${g}, ${b})`;
         }
         
