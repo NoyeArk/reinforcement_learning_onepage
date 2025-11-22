@@ -298,9 +298,9 @@ function drawGrid(env, V = null, policy = null, isInitialPolicy = false) {
                 case 2: endY += arrowLength; break;
                 case 3: endX -= arrowLength; break;
                 case 4: 
-                    // 不动动作：绘制一个圆圈表示停留
+                    // 不动动作：绘制一个圆圈表示停留（较小的圆圈）
                     ctx.beginPath();
-                    ctx.arc(centerX, centerY, arrowLength * 0.5, 0, 2 * Math.PI);
+                    ctx.arc(centerX, centerY, arrowLength * 0.25, 0, 2 * Math.PI);
                     ctx.fill();
                     break; // 不动动作不需要箭头，跳出switch
             }
