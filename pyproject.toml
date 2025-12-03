@@ -1,0 +1,11 @@
+[project]
+name = "reinforcement-learning-onepage"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.2",
+    "gym>=0.26.2",
+    "matplotlib>=3.10.7",
+]

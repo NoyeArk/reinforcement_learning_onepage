@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>强化学习 - 值迭代可视化</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 强化学习 - 迭代算法可视化</h1>
+            <p>Grid World 环境中的值迭代和策略迭代算法演示</p>
+        </header>
+
+        <div class="controls">
+            <button id="initBtn" class="btn btn-primary">初始化环境</button>
+            <button id="runBtn" class="btn btn-success" disabled>运行算法</button>
+            <button id="resetBtn" class="btn btn-warning" disabled>重置环境</button>
+            <button id="prevIterBtn" class="btn btn-info" disabled>上一次迭代</button>
+            <button id="nextIterBtn" class="btn btn-info" disabled>下一次迭代</button>
+        </div>
+
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="gridCanvas"></canvas>
+                <div id="info" class="info-panel">
+                    <h3>状态信息</h3>
+                    <div id="stateInfo"></div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="panel">
+                    <h3>🔄 迭代历史</h3>
+                    <div class="param-form">
+                        <div class="form-group">
+                            <label>查看迭代次数:</label>
+                            <div class="iteration-input-group">
+                                <input type="number" id="iterationInput" min="1" value="1" class="form-input" placeholder="迭代次数">
+                                <button id="viewIterationBtn" class="btn btn-small" disabled>查看</button>
+                            </div>
+                            <div id="iterationInfo" class="iteration-info">
+                                <p>运行算法后可查看历史迭代</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3>⚙️ 环境参数</h3>
+                    <div class="param-form">
+                        <div class="form-group">
+                            <label>算法选择:</label>
+                            <select id="algorithmSelect" class="form-input">
+                                <option value="value_iteration">值迭代 (Value Iteration)</option>
+                                <option value="policy_iteration">策略迭代 (Policy Iteration)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>网格宽度:</label>
+                            <input type="number" id="gridWidth" min="2" max="20" value="5" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>网格高度:</label>
+                            <input type="number" id="gridHeight" min="2" max="20" value="5" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>起始位置 X:</label>
+                            <input type="number" id="startX" min="0" max="19" value="0" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>起始位置 Y:</label>
+                            <input type="number" id="startY" min="0" max="19" value="0" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>目标位置 X:</label>
+                            <input type="number" id="targetX" min="0" max="19" value="4" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>目标位置 Y:</label>
+                            <input type="number" id="targetY" min="0" max="19" value="4" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>禁止状态:</label>
+                            <div id="forbiddenStates" class="forbidden-list"></div>
+                            <div class="forbidden-input-group">
+                                <input type="number" id="forbiddenX" min="0" max="19" value="0" placeholder="X" class="form-input-small">
+                                <input type="number" id="forbiddenY" min="0" max="19" value="0" placeholder="Y" class="form-input-small">
+                                <button id="addForbiddenBtn" class="btn btn-small">添加</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3>📊 状态值</h3>
+                    <div id="stateValues" class="values-grid"></div>
+                </div>
+                <div class="panel">
+                    <h3>🎮 控制信息</h3>
+                    <div id="controlInfo">
+                        <p>点击"初始化环境"开始</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
