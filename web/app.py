@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from grid_world import GridWorld
-from value_iteration import ValueIteration, PolicyIteration
+from value_iteration import ValueIteration, PolicyIteration, TruncatedPolicyIteration
 
 app = Flask(__name__)
 
@@ -50,6 +50,8 @@ def init_env():
     # 根据算法类型创建对应的算法实例
     if algorithm_type == "policy_iteration":
         algorithm = PolicyIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
+    elif algorithm_type == "truncated_policy_iteration":
+        algorithm = TruncatedPolicyIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
     else:  # 默认使用值迭代
         algorithm = ValueIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
 
@@ -120,25 +122,6 @@ def run_value_iteration():
                 [float(v) for v in row] for row in algorithm.action_values
             ],
             "total_iterations": total_iterations,
-        }
-    )
-
-
-@app.route("/api/reset", methods=["POST"])
-def reset_env():
-    """重置环境"""
-    global env
-
-    if env is None:
-        return jsonify({"error": "Environment not initialized"}), 400
-
-    state, info = env.reset()
-    return jsonify(
-        {
-            "state": list(state),
-            "trajectory": [
-                list(t) if isinstance(t, (tuple, list)) else t for t in env.traj
-            ],
         }
     )
 
@@ -221,10 +204,23 @@ def step_env():
     if algorithm is None:
         return jsonify({"error": "Algorithm not run"}), 400
 
+    # 获取请求参数，支持指定使用哪个迭代的策略
+    data = request.get_json() or {}
+    iteration_num = data.get("iteration", None)
+    
+    # 如果指定了迭代次数，使用该迭代的策略；否则使用当前策略
+    if iteration_num is not None and hasattr(algorithm, 'iteration_history') and algorithm.iteration_history:
+        if iteration_num < 1 or iteration_num > len(algorithm.iteration_history):
+            return jsonify({"error": f"Iteration number must be between 1 and {len(algorithm.iteration_history)}"}), 400
+        history_item = algorithm.iteration_history[iteration_num - 1]
+        policy_to_use = history_item["policy"]
+    else:
+        policy_to_use = algorithm.policy
+
     # 找到最优动作索引
     best_action_idx = 0
-    max_prob = algorithm.policy[state_idx][0]
-    for i, prob in enumerate(algorithm.policy[state_idx]):
+    max_prob = policy_to_use[state_idx][0]
+    for i, prob in enumerate(policy_to_use[state_idx]):
         if prob > max_prob:
             max_prob = prob
             best_action_idx = i

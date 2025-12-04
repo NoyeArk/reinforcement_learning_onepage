@@ -16,9 +16,10 @@
         <div class="controls">
             <button id="initBtn" class="btn btn-primary">初始化环境</button>
             <button id="runBtn" class="btn btn-success" disabled>运行算法</button>
-            <button id="resetBtn" class="btn btn-warning" disabled>重置环境</button>
             <button id="prevIterBtn" class="btn btn-info" disabled>上一次迭代</button>
             <button id="nextIterBtn" class="btn btn-info" disabled>下一次迭代</button>
+            <button id="simulateBtn" class="btn btn-danger" disabled>模拟策略</button>
+            <button id="stepSimBtn" class="btn btn-info" disabled>执行一步</button>
         </div>
 
         <div class="main-content">
@@ -54,6 +55,7 @@
                             <select id="algorithmSelect" class="form-input">
                                 <option value="value_iteration">值迭代 (Value Iteration)</option>
                                 <option value="policy_iteration">策略迭代 (Policy Iteration)</option>
+                                <option value="truncated_policy_iteration">截断策略迭代 (Truncated Policy Iteration)</option>
                             </select>
                         </div>
                         <div class="form-group">

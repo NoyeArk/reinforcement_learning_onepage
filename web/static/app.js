@@ -8,10 +8,12 @@ let gridWidth = 5;
 let gridHeight = 5;
 let isAutoPlaying = false;
 let autoPlayInterval = null;
+let isSimulating = false; // 是否正在模拟策略移动
 let forbiddenStates = [[2, 1], [3, 3], [1, 3]]; // 默认禁止状态
 let currentAgentPos = null; // 当前智能体位置
 let totalIterations = 0; // 总迭代次数
 let currentIteration = 0; // 当前查看的迭代次数
+let algorithm = null; // 存储算法实例的引用（用于模拟）
 
 // 颜色定义
 const colors = {
@@ -382,6 +384,30 @@ async function initEnvironment() {
             return;
         }
         
+        // 停止模拟（如果正在运行）
+        stopSimulation();
+        
+        // 清空所有状态和value信息
+        envData = null;
+        stateValues = null;
+        policy = null;
+        currentAgentPos = null;
+        totalIterations = 0;
+        currentIteration = 0;
+        
+        // 重置迭代次数输入框
+        document.getElementById('iterationInput').value = 1;
+        document.getElementById('iterationInput').max = 1;
+        document.getElementById('viewIterationBtn').disabled = true;
+        updateIterationInfo('运行算法后可查看历史迭代');
+        
+        // 禁用所有相关按钮
+        document.getElementById('runBtn').disabled = true;
+        document.getElementById('prevIterBtn').disabled = true;
+        document.getElementById('nextIterBtn').disabled = true;
+        document.getElementById('simulateBtn').disabled = true;
+        document.getElementById('stepSimBtn').disabled = true;
+        
         updateControlInfo('正在初始化环境...');
         const response = await fetch('/api/init', {
             method: 'POST',
@@ -397,17 +423,9 @@ async function initEnvironment() {
         
         envData = await response.json();
         
-        // 重置智能体位置和迭代历史
-        currentAgentPos = null;
-        totalIterations = 0;
-        
-        // 重置迭代次数输入框
-        document.getElementById('iterationInput').value = 1;
-        document.getElementById('iterationInput').max = 1;
-        document.getElementById('viewIterationBtn').disabled = true;
-        updateIterationInfo('运行算法后可查看历史迭代');
-        
+        // 重新初始化画布
         initCanvas();
+        
         // 绘制智能体在起始位置
         if (envData.start_state && envData.start_state.length === 2) {
             drawAgent(envData.start_state[0], envData.start_state[1]);
@@ -415,10 +433,6 @@ async function initEnvironment() {
         
         updateControlInfo('环境已初始化');
         document.getElementById('runBtn').disabled = false;
-        document.getElementById('resetBtn').disabled = false;
-        document.getElementById('prevIterBtn').disabled = true;
-        document.getElementById('nextIterBtn').disabled = true;
-        currentIteration = 0;
     } catch (error) {
         console.error('初始化失败:', error);
         updateControlInfo('初始化失败: ' + error.message);
@@ -428,7 +442,12 @@ async function initEnvironment() {
 async function runValueIteration() {
     try {
         const algorithm = document.getElementById('algorithmSelect').value;
-        const algorithmName = algorithm === 'policy_iteration' ? '策略迭代' : '值迭代';
+        let algorithmName = '值迭代';
+        if (algorithm === 'policy_iteration') {
+            algorithmName = '策略迭代';
+        } else if (algorithm === 'truncated_policy_iteration') {
+            algorithmName = '截断策略迭代';
+        }
         updateControlInfo(`正在运行${algorithmName}算法...`);
         const response = await fetch('/api/run_value_iteration', { method: 'POST' });
         const data = await response.json();
@@ -471,42 +490,13 @@ async function runValueIteration() {
         // 设置当前迭代为最后一次迭代
         currentIteration = totalIterations;
         updateControlInfo(`${algorithmName}完成！共 ${totalIterations} 次迭代`);
-        // 启用迭代历史导航按钮
+        // 启用迭代历史导航按钮和模拟按钮
         updateIterationButtons();
+        document.getElementById('simulateBtn').disabled = false;
+        document.getElementById('stepSimBtn').disabled = false;
     } catch (error) {
         console.error('算法运行失败:', error);
         updateControlInfo('算法运行失败: ' + error.message);
-    }
-}
-
-async function resetEnvironment() {
-    try {
-        const response = await fetch('/api/reset', { method: 'POST' });
-        const data = await response.json();
-        
-        // 重置智能体位置变量
-        currentAgentPos = null;
-        
-        // 重新绘制网格（这会清除画布和所有之前的内容）
-        // 注意：drawGrid会检查currentAgentPos，避免在智能体位置绘制起始状态标记
-        drawGrid();
-        
-        // 绘制智能体在起始位置（这会更新currentAgentPos）
-        if (data.state && data.state.length === 2) {
-            drawAgent(data.state[0], data.state[1]);
-        }
-        
-        // 重置后，如果已经运行过算法，恢复到最后一次迭代
-        if (totalIterations > 0) {
-            currentIteration = totalIterations;
-            document.getElementById('iterationInput').value = totalIterations;
-            updateIterationButtons();
-        }
-        
-        updateControlInfo(`环境已重置，当前位置: (${data.state[0]}, ${data.state[1]})`);
-    } catch (error) {
-        console.error('重置失败:', error);
-        updateControlInfo('重置失败: ' + error.message);
     }
 }
 
@@ -652,6 +642,9 @@ async function viewIteration() {
         currentIteration = iterationNum;
         document.getElementById('iterationInput').value = iterationNum;
         
+        // 停止模拟（如果正在运行），因为策略已改变
+        stopSimulation();
+        
         updateControlInfo(`显示第 ${iterationNum} 次迭代的结果`);
         updateIterationInfo(`当前显示: 第 ${iterationNum} 次迭代 / 共 ${totalIterations} 次`);
         
@@ -664,14 +657,90 @@ async function viewIteration() {
     }
 }
 
+// 执行一步模拟
+async function stepSimulation() {
+    try {
+        // 使用当前查看的迭代的策略
+        const iterationToUse = currentIteration > 0 ? currentIteration : totalIterations;
+        const response = await fetch('/api/step', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ iteration: iterationToUse })
+        });
+        const data = await response.json();
+        
+        drawGrid();
+        if (data.trajectory && data.trajectory.length > 0) {
+            drawTrajectory(data.trajectory);
+        }
+        drawAgent(data.state[0], data.state[1]);
+        
+        const actionNames = { '0,1': 'DOWN', '1,0': 'RIGHT', '0,-1': 'UP', '-1,0': 'LEFT', '0,0': 'STAY' };
+        const actionKey = data.action.join(',');
+        const actionName = actionNames[actionKey] || actionKey;
+        
+        updateControlInfo(
+            `步骤完成: 动作=${actionName}, 奖励=${data.reward}, ` +
+            `位置=(${data.state[0]}, ${data.state[1]}), ` +
+            `完成=${data.done ? '是' : '否'}`
+        );
+        
+        if (data.done) {
+            stopSimulation();
+            updateControlInfo('🎉 到达目标状态！');
+        }
+    } catch (error) {
+        console.error('执行步骤失败:', error);
+        updateControlInfo('执行步骤失败: ' + error.message);
+    }
+}
+
+// 开始/停止模拟策略移动
+function startSimulation() {
+    if (isSimulating) {
+        stopSimulation();
+        return;
+    }
+    
+    if (!policy || !stateValues) {
+        alert('请先运行算法');
+        return;
+    }
+    
+    isSimulating = true;
+    document.getElementById('simulateBtn').textContent = '停止模拟';
+    document.getElementById('simulateBtn').classList.remove('btn-danger');
+    document.getElementById('simulateBtn').classList.add('btn-warning');
+    document.getElementById('stepSimBtn').disabled = true;
+    
+    autoPlayInterval = setInterval(async () => {
+        await stepSimulation();
+    }, 500);
+}
+
+function stopSimulation() {
+    isSimulating = false;
+    if (autoPlayInterval) {
+        clearInterval(autoPlayInterval);
+        autoPlayInterval = null;
+    }
+    document.getElementById('simulateBtn').textContent = '模拟策略';
+    document.getElementById('simulateBtn').classList.remove('btn-warning');
+    document.getElementById('simulateBtn').classList.add('btn-danger');
+    document.getElementById('stepSimBtn').disabled = false;
+}
+
 // 事件监听
 document.getElementById('initBtn').addEventListener('click', initEnvironment);
 document.getElementById('runBtn').addEventListener('click', runValueIteration);
-document.getElementById('resetBtn').addEventListener('click', resetEnvironment);
 document.getElementById('prevIterBtn').addEventListener('click', viewPreviousIteration);
 document.getElementById('nextIterBtn').addEventListener('click', viewNextIteration);
 document.getElementById('addForbiddenBtn').addEventListener('click', addForbiddenState);
 document.getElementById('viewIterationBtn').addEventListener('click', viewIteration);
+document.getElementById('simulateBtn').addEventListener('click', startSimulation);
+document.getElementById('stepSimBtn').addEventListener('click', stepSimulation);
 
 // 监听网格大小变化，更新输入框限制
 document.getElementById('gridWidth').addEventListener('change', updateInputLimits);

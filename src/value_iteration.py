@@ -25,6 +25,7 @@ class ValueIteration(Iteration):
                     # qk(s, a) = r(s, a) + gamma * V(s')
                     q_value = reward + self.gamma * self.state_values[next_state]
                     self.action_values[state][action] = q_value
+            old_state_values = copy.deepcopy(self.state_values)
 
             # policy update
             best_actions = [
@@ -35,25 +36,17 @@ class ValueIteration(Iteration):
                 self.policy[state] = [
                     1 if a == best_action else 0 for a in range(self.env.num_actions)
                 ]
-
-            state_values_ = copy.deepcopy(self.state_values)
-
             # value update
             self.state_values = [
                 max(action_values) for action_values in self.action_values
             ]
 
             # 保存当前迭代的状态值和策略
-            self.iteration_history.append(
-                {
-                    "iteration": iter_num + 1,
-                    "state_values": copy.deepcopy(self.state_values),
-                    "policy": copy.deepcopy(self.policy),
-                    "action_values": copy.deepcopy(self.action_values),
-                }
+            self.add_iteration_history(
+                iter_num + 1, self.state_values, self.policy, self.action_values
             )
 
-            if abs(sum(self.state_values) - sum(state_values_)) < self.theta:
+            if self.check_state_values_convergence(old_state_values, self.state_values):
                 break
 
 
@@ -72,35 +65,25 @@ class PolicyIteration(Iteration):
         self.iteration_history = []
 
         for iter_num in range(self.max_iterations):
+            old_state_values = copy.deepcopy(self.state_values)
+
             # 策略评估
             self.policy_evaluation()
 
             # 策略改进
-            old_policy = copy.deepcopy(self.policy)
             self.policy_improvement()
 
             # 保存当前迭代的状态值和策略
-            self.iteration_history.append(
-                {
-                    "iteration": iter_num + 1,
-                    "state_values": copy.deepcopy(self.state_values),
-                    "policy": copy.deepcopy(self.policy),
-                    "action_values": copy.deepcopy(self.action_values),
-                }
+            self.add_iteration_history(
+                iter_num + 1, self.state_values, self.policy, self.action_values
             )
 
             # 检查策略是否改变
-            policy_changed = False
-            for state in range(self.env.num_states):
-                if old_policy[state] != self.policy[state]:
-                    policy_changed = True
-                    break
-
-            if not policy_changed:
+            if self.check_policy_convergence(old_state_values, self.state_values):
                 break
 
     def policy_evaluation(self):
-        for _ in range(self.max_iterations):
+        while True:
             state_values_ = copy.deepcopy(self.state_values)
 
             for state in range(self.env.num_states):
@@ -119,7 +102,7 @@ class PolicyIteration(Iteration):
                     )
                 self.state_values[state] = value
 
-            if abs(sum(self.state_values) - sum(state_values_)) < self.theta:
+            if self.check_state_values_convergence(state_values_, self.state_values):
                 break
 
     def policy_improvement(self):
@@ -139,3 +122,32 @@ class PolicyIteration(Iteration):
             self.policy[state] = [
                 1 if a == best_action else 0 for a in range(self.env.num_actions)
             ]
+
+
+class TruncatedPolicyIteration(PolicyIteration):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.truncated_iterations = 100
+
+    def policy_evaluation(self):
+        for _ in range(self.truncated_iterations):
+            state_values_ = copy.deepcopy(self.state_values)
+
+            for state in range(self.env.num_states):
+                # 根据策略的概率分布计算状态值
+                # V(s) = sum_a π(a|s) * sum_{s',r} p(s',r|s,a) * [r + gamma * V(s')]
+                # 在当前确定性环境中，简化为：
+                # V(s) = sum_a π(a|s) * [r(s,a) + gamma * V(s')]
+                value = 0.0
+                for action in range(self.env.num_actions):
+                    next_state, reward = self.env.get_next_state_and_reward(
+                        state, action
+                    )
+                    action_prob = self.policy[state][action]
+                    value += action_prob * (
+                        reward + self.gamma * self.state_values[next_state]
+                    )
+                self.state_values[state] = value
+
+            if self.check_state_values_convergence(state_values_, self.state_values):
+                break
