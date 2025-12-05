@@ -30,6 +30,7 @@ class GridWorld:
         self.num_states = env_size[0] * env_size[1]
         self.start_state = start_state
         self.target_state = target_state
+        self.target_state_idx = self.xy_to_state_idx(target_state[0], target_state[1])
         self.forbidden_states = forbidden_states
 
         self.agent_state = start_state

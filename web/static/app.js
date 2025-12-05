@@ -447,6 +447,8 @@ async function runValueIteration() {
             algorithmName = '策略迭代';
         } else if (algorithm === 'truncated_policy_iteration') {
             algorithmName = '截断策略迭代';
+        } else if (algorithm === 'monte_carlo') {
+            algorithmName = '蒙特卡洛方法';
         }
         updateControlInfo(`正在运行${algorithmName}算法...`);
         const response = await fetch('/api/run_value_iteration', { method: 'POST' });

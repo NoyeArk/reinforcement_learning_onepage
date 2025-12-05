@@ -1,4 +1,5 @@
 import copy
+import random
 from abc import abstractmethod
 
 
@@ -10,7 +11,10 @@ class Iteration:
         self.max_iterations = max_iterations
         self.state_values = [0] * env.num_states
         self.action_values = [[0] * env.num_actions for _ in range(env.num_states)]
-        self.policy = [[0] * env.num_actions for _ in range(env.num_states)]
+        self.policy = [
+            [random.randint(0, env.num_actions - 1) for _ in range(env.num_actions)]
+            for _ in range(env.num_states)
+        ]
         self.iteration_history = []  # 保存每次迭代的状态值和策略
 
     def add_iteration_history(
@@ -24,6 +28,16 @@ class Iteration:
                 action_values=copy.deepcopy(action_values),
             )
         )
+
+    def policy_update(self):
+        best_actions = [
+            max(enumerate(action_values), key=lambda x: x[1])[0]
+            for action_values in self.action_values
+        ]
+        for state, best_action in enumerate(best_actions):
+            self.policy[state] = [
+                1 if a == best_action else 0 for a in range(self.env.num_actions)
+            ]
 
     def check_state_values_convergence(
         self, old_state_values: list, new_state_values: list

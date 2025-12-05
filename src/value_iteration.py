@@ -28,14 +28,8 @@ class ValueIteration(Iteration):
             old_state_values = copy.deepcopy(self.state_values)
 
             # policy update
-            best_actions = [
-                max(enumerate(action_values), key=lambda x: x[1])[0]
-                for action_values in self.action_values
-            ]  # [num_states]
-            for state, best_action in enumerate(best_actions):
-                self.policy[state] = [
-                    1 if a == best_action else 0 for a in range(self.env.num_actions)
-                ]
+            self.policy_update()
+
             # value update
             self.state_values = [
                 max(action_values) for action_values in self.action_values
@@ -55,13 +49,6 @@ class PolicyIteration(Iteration):
         super().__init__(*args, **kwargs)
 
     def iteration(self):
-        # 初始化策略为均匀随机策略
-        self.policy = [
-            [random.random() for _ in range(self.env.num_actions)]
-            for _ in range(self.env.num_states)
-        ]
-
-        # 清空历史记录
         self.iteration_history = []
 
         for iter_num in range(self.max_iterations):
@@ -114,14 +101,7 @@ class PolicyIteration(Iteration):
                 self.action_values[state][action] = q_value
 
         # 策略更新：对每个状态，选择Q值最大的动作
-        best_actions = [
-            max(enumerate(action_values), key=lambda x: x[1])[0]
-            for action_values in self.action_values
-        ]  # [num_states]
-        for state, best_action in enumerate(best_actions):
-            self.policy[state] = [
-                1 if a == best_action else 0 for a in range(self.env.num_actions)
-            ]
+        self.policy_update()
 
 
 class TruncatedPolicyIteration(PolicyIteration):

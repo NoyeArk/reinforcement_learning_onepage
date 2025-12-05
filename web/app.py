@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from grid_world import GridWorld
 from value_iteration import ValueIteration, PolicyIteration, TruncatedPolicyIteration
+from monte_carlo_iteration import MonteCarloBasic
 
 app = Flask(__name__)
 
@@ -51,7 +52,11 @@ def init_env():
     if algorithm_type == "policy_iteration":
         algorithm = PolicyIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
     elif algorithm_type == "truncated_policy_iteration":
-        algorithm = TruncatedPolicyIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
+        algorithm = TruncatedPolicyIteration(
+            env, theta=0.001, gamma=0.9, max_iterations=100
+        )
+    elif algorithm_type == "monte_carlo":
+        algorithm = MonteCarloBasic(env, theta=0.001, gamma=0.9, max_iterations=100)
     else:  # 默认使用值迭代
         algorithm = ValueIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
 
@@ -207,11 +212,22 @@ def step_env():
     # 获取请求参数，支持指定使用哪个迭代的策略
     data = request.get_json() or {}
     iteration_num = data.get("iteration", None)
-    
+
     # 如果指定了迭代次数，使用该迭代的策略；否则使用当前策略
-    if iteration_num is not None and hasattr(algorithm, 'iteration_history') and algorithm.iteration_history:
+    if (
+        iteration_num is not None
+        and hasattr(algorithm, "iteration_history")
+        and algorithm.iteration_history
+    ):
         if iteration_num < 1 or iteration_num > len(algorithm.iteration_history):
-            return jsonify({"error": f"Iteration number must be between 1 and {len(algorithm.iteration_history)}"}), 400
+            return (
+                jsonify(
+                    {
+                        "error": f"Iteration number must be between 1 and {len(algorithm.iteration_history)}"
+                    }
+                ),
+                400,
+            )
         history_item = algorithm.iteration_history[iteration_num - 1]
         policy_to_use = history_item["policy"]
     else:
