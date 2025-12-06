@@ -4,7 +4,7 @@ from abc import abstractmethod
 
 
 class Iteration:
-    def __init__(self, env, theta=0.0001, gamma=0.9, max_iterations=1000):
+    def __init__(self, env, theta=0.001, gamma=0.9, max_iterations=1000):
         self.env = env
         self.theta = theta
         self.gamma = gamma
@@ -58,6 +58,14 @@ class Iteration:
             if old_policy[i] != new_policy[i]:
                 return False
         return True
+
+    def print_state_values(self):
+        for i in range(self.env.env_size[0]):
+            print(
+                self.state_values[
+                    i * self.env.env_size[1] : (i + 1) * self.env.env_size[1]
+                ]
+            )
 
     @abstractmethod
     def iteration(self):

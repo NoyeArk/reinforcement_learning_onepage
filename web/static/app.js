@@ -2,6 +2,7 @@
 let envData = null;
 let stateValues = null;
 let policy = null;
+let actionValues = null; // 存储action_values
 let canvas, ctx;
 let cellSize = 80;
 let gridWidth = 5;
@@ -14,6 +15,7 @@ let currentAgentPos = null; // 当前智能体位置
 let totalIterations = 0; // 总迭代次数
 let currentIteration = 0; // 当前查看的迭代次数
 let algorithm = null; // 存储算法实例的引用（用于模拟）
+let tooltip = null; // 工具提示框元素
 
 // 颜色定义
 const colors = {
@@ -40,6 +42,15 @@ function initCanvas() {
     
     canvas.width = gridWidth * cellSize + 100;
     canvas.height = gridHeight * cellSize + 100;
+    
+    // 确保工具提示框已创建
+    initTooltip();
+    
+    // 添加鼠标事件监听（避免重复添加）
+    canvas.removeEventListener('mousemove', handleCanvasMouseMove);
+    canvas.removeEventListener('mouseleave', handleCanvasMouseLeave);
+    canvas.addEventListener('mousemove', handleCanvasMouseMove);
+    canvas.addEventListener('mouseleave', handleCanvasMouseLeave);
     
     drawGrid();
 }
@@ -391,6 +402,7 @@ async function initEnvironment() {
         envData = null;
         stateValues = null;
         policy = null;
+        actionValues = null;
         currentAgentPos = null;
         totalIterations = 0;
         currentIteration = 0;
@@ -403,6 +415,7 @@ async function initEnvironment() {
         
         // 禁用所有相关按钮
         document.getElementById('runBtn').disabled = true;
+        document.getElementById('stepIterBtn').disabled = true;
         document.getElementById('prevIterBtn').disabled = true;
         document.getElementById('nextIterBtn').disabled = true;
         document.getElementById('simulateBtn').disabled = true;
@@ -423,16 +436,32 @@ async function initEnvironment() {
         
         envData = await response.json();
         
+        // 获取初始策略和状态值
+        if (envData.state_values && envData.policy) {
+            stateValues = envData.state_values;
+            policy = envData.policy;
+            actionValues = envData.action_values || null;
+        }
+        
         // 重新初始化画布
         initCanvas();
         
-        // 绘制智能体在起始位置
+        // 绘制网格（包括状态值和策略）
+        drawGrid();
+        
+        // 绘制智能体在起始位置（这会更新currentAgentPos）
         if (envData.start_state && envData.start_state.length === 2) {
             drawAgent(envData.start_state[0], envData.start_state[1]);
         }
         
-        updateControlInfo('环境已初始化');
+        // 更新状态值显示
+        if (stateValues) {
+            updateStateValues(stateValues);
+        }
+        
+        updateControlInfo('环境已初始化，已显示初始策略');
         document.getElementById('runBtn').disabled = false;
+        document.getElementById('stepIterBtn').disabled = false;
     } catch (error) {
         console.error('初始化失败:', error);
         updateControlInfo('初始化失败: ' + error.message);
@@ -456,6 +485,7 @@ async function runValueIteration() {
         
         stateValues = data.state_values;
         policy = data.policy;
+        actionValues = data.action_values || null;
         totalIterations = data.total_iterations || 0;
         
         // 更新迭代次数输入框的最大值
@@ -494,6 +524,8 @@ async function runValueIteration() {
         updateControlInfo(`${algorithmName}完成！共 ${totalIterations} 次迭代`);
         // 启用迭代历史导航按钮和模拟按钮
         updateIterationButtons();
+        // 运行算法完成后，禁用迭代一次按钮（因为已经运行到收敛）
+        document.getElementById('stepIterBtn').disabled = true;
         document.getElementById('simulateBtn').disabled = false;
         document.getElementById('stepSimBtn').disabled = false;
     } catch (error) {
@@ -590,6 +622,84 @@ function updateIterationInfo(message) {
     infoDiv.innerHTML = `<p>${message}</p>`;
 }
 
+// 执行一次迭代
+async function stepIteration() {
+    try {
+        const algorithm = document.getElementById('algorithmSelect').value;
+        let algorithmName = '值迭代';
+        if (algorithm === 'policy_iteration') {
+            algorithmName = '策略迭代';
+        } else if (algorithm === 'truncated_policy_iteration') {
+            algorithmName = '截断策略迭代';
+        } else if (algorithm === 'monte_carlo') {
+            algorithmName = '蒙特卡洛方法';
+        }
+        
+        updateControlInfo(`正在执行${algorithmName}的一次迭代...`);
+        const response = await fetch('/api/step_iteration', { method: 'POST' });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '迭代失败');
+        }
+        
+        const data = await response.json();
+        
+        stateValues = data.state_values;
+        policy = data.policy;
+        actionValues = data.action_values || null;
+        totalIterations = data.total_iterations || 0;
+        currentIteration = data.current_iteration || 0;
+        
+        // 更新迭代次数输入框的最大值
+        const iterationInput = document.getElementById('iterationInput');
+        if (totalIterations > 0) {
+            iterationInput.max = totalIterations;
+            iterationInput.value = currentIteration; // 显示当前迭代
+            document.getElementById('viewIterationBtn').disabled = false;
+            updateIterationInfo(`当前迭代: ${currentIteration} / 共 ${totalIterations} 次`);
+            // 更新迭代历史导航按钮状态
+            updateIterationButtons();
+        } else {
+            iterationInput.max = 1;
+            currentIteration = 0;
+            document.getElementById('viewIterationBtn').disabled = true;
+            updateIterationInfo('运行算法后可查看历史迭代');
+            document.getElementById('prevIterBtn').disabled = true;
+            document.getElementById('nextIterBtn').disabled = true;
+        }
+        
+        // 重置智能体位置为起始位置（先清除，让drawGrid可以绘制起始位置标记）
+        currentAgentPos = null;
+        
+        // 绘制网格（包括状态值和策略）
+        drawGrid();
+        
+        // 绘制智能体在起始位置（这会更新currentAgentPos）
+        if (envData && envData.start_state && envData.start_state.length === 2) {
+            drawAgent(envData.start_state[0], envData.start_state[1]);
+        }
+        
+        updateStateValues(data.state_values);
+        
+        // 如果收敛，禁用迭代一次按钮
+        if (data.converged) {
+            document.getElementById('stepIterBtn').disabled = true;
+            updateControlInfo(`${algorithmName}已完成！已收敛，共 ${totalIterations} 次迭代`);
+        } else {
+            updateControlInfo(`${algorithmName}第 ${currentIteration} 次迭代完成`);
+        }
+        
+        // 启用迭代历史导航按钮和模拟按钮
+        updateIterationButtons();
+        document.getElementById('simulateBtn').disabled = false;
+        document.getElementById('stepSimBtn').disabled = false;
+    } catch (error) {
+        console.error('迭代失败:', error);
+        updateControlInfo('迭代失败: ' + error.message);
+    }
+}
+
 // 查看指定迭代次数的结果
 async function viewIteration() {
     try {
@@ -625,6 +735,7 @@ async function viewIteration() {
         // 更新状态值和策略
         stateValues = data.state_values;
         policy = data.policy;
+        actionValues = data.action_values || null;
         
         // 重置智能体位置为起始位置
         currentAgentPos = null;
@@ -652,6 +763,13 @@ async function viewIteration() {
         
         // 更新按钮状态
         updateIterationButtons();
+        
+        // 如果当前迭代次数小于总迭代次数，说明还可以继续迭代
+        if (currentIteration < totalIterations) {
+            document.getElementById('stepIterBtn').disabled = false;
+        } else {
+            document.getElementById('stepIterBtn').disabled = true;
+        }
     } catch (error) {
         console.error('查看迭代结果失败:', error);
         alert('查看迭代结果失败: ' + error.message);
@@ -737,6 +855,7 @@ function stopSimulation() {
 // 事件监听
 document.getElementById('initBtn').addEventListener('click', initEnvironment);
 document.getElementById('runBtn').addEventListener('click', runValueIteration);
+document.getElementById('stepIterBtn').addEventListener('click', stepIteration);
 document.getElementById('prevIterBtn').addEventListener('click', viewPreviousIteration);
 document.getElementById('nextIterBtn').addEventListener('click', viewNextIteration);
 document.getElementById('addForbiddenBtn').addEventListener('click', addForbiddenState);
@@ -755,7 +874,144 @@ document.getElementById('iterationInput').addEventListener('keypress', function(
     }
 });
 
+// 处理Canvas鼠标移动事件
+function handleCanvasMouseMove(event) {
+    if (!envData || !actionValues) {
+        if (tooltip) {
+            tooltip.style.display = 'none';
+        }
+        return;
+    }
+    
+    const rect = canvas.getBoundingClientRect();
+    const offsetX = 50;
+    const offsetY = 50;
+    
+    // 计算鼠标在canvas中的位置
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // 计算网格坐标
+    const gridX = Math.floor((x - offsetX) / cellSize);
+    const gridY = Math.floor((y - offsetY) / cellSize);
+    
+    // 检查是否在有效范围内
+    if (gridX >= 0 && gridX < gridWidth && gridY >= 0 && gridY < gridHeight) {
+        // 计算状态索引
+        const stateIdx = gridY * gridWidth + gridX;
+        
+        if (stateIdx >= 0 && stateIdx < actionValues.length) {
+            // 获取该状态的action_values
+            const stateActionValues = actionValues[stateIdx];
+            
+            // 获取动作名称
+            const actionNames = getActionNames();
+            
+            // 构建提示文本
+            let tooltipText = `<div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px;">状态 (${gridX}, ${gridY})</div>`;
+            tooltipText += '<div style="font-size: 11px; margin-bottom: 5px; color: #ccc;">动作值 (Q值):</div>';
+            
+            stateActionValues.forEach((value, actionIdx) => {
+                const actionName = actionNames[actionIdx] || `动作${actionIdx}`;
+                const valueColor = value > 0 ? '#4CAF50' : value < 0 ? '#F44336' : '#fff';
+                tooltipText += `<div style="margin-top: 4px; display: flex; justify-content: space-between;"><span>${actionName}:</span><span style="color: ${valueColor}; font-weight: bold; margin-left: 10px;">${value.toFixed(3)}</span></div>`;
+            });
+            
+            // 显示工具提示框
+            tooltip.innerHTML = tooltipText;
+            tooltip.style.display = 'block';
+            
+            // 计算工具提示框位置，确保不超出屏幕
+            const tooltipWidth = 250;
+            const tooltipHeight = tooltip.offsetHeight || 200;
+            let left = event.clientX + 15;
+            let top = event.clientY + 15;
+            
+            // 如果超出右边界，显示在鼠标左侧
+            if (left + tooltipWidth > window.innerWidth) {
+                left = event.clientX - tooltipWidth - 15;
+            }
+            
+            // 如果超出下边界，显示在鼠标上方
+            if (top + tooltipHeight > window.innerHeight) {
+                top = event.clientY - tooltipHeight - 15;
+            }
+            
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        } else {
+            // 超出范围，隐藏工具提示框
+            if (tooltip) {
+                tooltip.style.display = 'none';
+            }
+        }
+    } else {
+        // 超出网格范围，隐藏工具提示框
+        if (tooltip) {
+            tooltip.style.display = 'none';
+        }
+    }
+}
+
+// 处理Canvas鼠标离开事件
+function handleCanvasMouseLeave() {
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+}
+
+// 获取动作名称
+function getActionNames() {
+    if (!envData || !envData.action_space) {
+        return ['DOWN', 'RIGHT', 'UP', 'LEFT', 'STAY'];
+    }
+    
+    const actionNames = [];
+    envData.action_space.forEach(action => {
+        const [dx, dy] = action;
+        if (dx === 0 && dy === 1) {
+            actionNames.push('DOWN');
+        } else if (dx === 1 && dy === 0) {
+            actionNames.push('RIGHT');
+        } else if (dx === 0 && dy === -1) {
+            actionNames.push('UP');
+        } else if (dx === -1 && dy === 0) {
+            actionNames.push('LEFT');
+        } else if (dx === 0 && dy === 0) {
+            actionNames.push('STAY');
+        } else {
+            actionNames.push(`(${dx},${dy})`);
+        }
+    });
+    
+    return actionNames;
+}
+
+// 初始化工具提示框（在页面加载时创建）
+function initTooltip() {
+    if (!tooltip) {
+        tooltip = document.createElement('div');
+        tooltip.id = 'actionValueTooltip';
+        tooltip.style.cssText = `
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            max-width: 250px;
+            line-height: 1.5;
+        `;
+        document.body.appendChild(tooltip);
+    }
+}
+
 // 初始化
+initTooltip();
 initCanvas();
 renderForbiddenStates();
 updateInputLimits();

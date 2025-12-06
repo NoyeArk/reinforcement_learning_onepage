@@ -1,30 +1,77 @@
 import copy
 import random
 import numpy as np
+from tqdm import tqdm
+
 from grid_world import GridWorld
 from value_iteration import PolicyIteration
 
 
-class MonteCarloBasic(PolicyIteration):
+class MonteCarloGreedy(PolicyIteration):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.epsilon = 0.3
+        self.epsilon = 0.1
+        self.max_iterations = 1000
+
+    def step_iteration(self):
+        """
+        执行一次迭代
+
+        Returns:
+            converged (bool): 是否收敛
+        """
+        # 如果是第一次迭代，清空历史记录
+        if self.current_iteration_num == 0:
+            self.iteration_history = []
+
+        # 检查是否超过最大迭代次数
+        if self.current_iteration_num >= self.max_iterations:
+            return True
+
+        old_state_values = copy.deepcopy(self.state_values)
+
+        # 估计值
+        for state in range(self.env.num_states):
+            for action in range(self.env.num_actions):
+                # 采样从 (s, a) 出发的多个 episode
+                q_value = self.sample_episode(state, action, num_samples=100)
+                self.action_values[state][action] = q_value
+
+            self.state_values[state] = max(self.action_values[state])
+
+            # policy update
+            self.policy_update()
+
+        # 增加迭代次数
+        self.current_iteration_num += 1
+
+        self.add_iteration_history(
+            self.current_iteration_num,
+            self.state_values,
+            self.policy,
+            self.action_values,
+        )
+
+        converged = self.check_state_values_convergence(
+            old_state_values, self.state_values
+        )
+        return converged
 
     def iteration(self):
+        # 重置迭代次数
+        self.current_iteration_num = 0
         self.iteration_history = []
 
         # k 次迭代
-        for iter_num in range(self.max_iterations):
-            print(f"Iteration {iter_num} of {self.max_iterations}")
+        for iter_num in tqdm(range(self.max_iterations), desc="Iterations"):
             old_state_values = copy.deepcopy(self.state_values)
 
             # 估计值
             for state in range(self.env.num_states):
                 print(f"Estimating state {state} of {self.env.num_states}")
                 for action in range(self.env.num_actions):
-                    print(f"Estimating action {action} of {self.env.num_actions}")
                     # 采样从 (s, a) 出发的多个 episode
-                    q_value = self.sample_episode(state, action, num_samples=10)
+                    q_value = self.sample_episode(state, action, num_samples=100)
                     self.action_values[state][action] = q_value
 
                 self.state_values[state] = max(self.action_values[state])
@@ -32,8 +79,14 @@ class MonteCarloBasic(PolicyIteration):
                 # policy update
                 self.policy_update()
 
+            # 增加迭代次数
+            self.current_iteration_num += 1
+
             self.add_iteration_history(
-                iter_num + 1, self.state_values, self.policy, self.action_values
+                self.current_iteration_num,
+                self.state_values,
+                self.policy,
+                self.action_values,
             )
             if self.check_state_values_convergence(old_state_values, self.state_values):
                 break
@@ -46,7 +99,7 @@ class MonteCarloBasic(PolicyIteration):
 
         # 采样 num_samples 次
         for _ in range(num_samples):
-            # print(f"Sampling episode {_} of {num_samples}")
+            print(f"Sampling episode {_} of {num_samples}")
             current_state = state
             current_action = action
             trajectory = []
@@ -75,8 +128,8 @@ class MonteCarloBasic(PolicyIteration):
 
 if __name__ == "__main__":
     env = GridWorld()
-    algorithm = MonteCarloBasic(env)
+    algorithm = MonteCarloGreedy(env)
     algorithm.iteration()
-    print(algorithm.state_values)
+    algorithm.print_state_values()
     print(algorithm.policy)
     print(algorithm.action_values)

@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from grid_world import GridWorld
 from value_iteration import ValueIteration, PolicyIteration, TruncatedPolicyIteration
-from monte_carlo_iteration import MonteCarloBasic
+from monte_carlo_iteration import MonteCarloGreedy
 
 app = Flask(__name__)
 
@@ -56,9 +56,37 @@ def init_env():
             env, theta=0.001, gamma=0.9, max_iterations=100
         )
     elif algorithm_type == "monte_carlo":
-        algorithm = MonteCarloBasic(env, theta=0.001, gamma=0.9, max_iterations=100)
+        algorithm = MonteCarloGreedy(env, theta=0.001, gamma=0.9, max_iterations=100)
     else:  # 默认使用值迭代
         algorithm = ValueIteration(env, theta=0.001, gamma=0.9, max_iterations=100)
+
+    # 转换初始策略和状态值为列表格式
+    # 注意：初始策略是随机整数列表，需要转换为有效的概率分布
+    policy_list = []
+    for state_idx in range(env.num_states):
+        x, y = env.state_idx_to_xy(state_idx)
+
+        # 初始策略是随机整数列表，转换为均匀分布
+        policy_state = algorithm.policy[state_idx]
+        num_actions = len(policy_state)
+
+        # 将随机整数列表转换为均匀分布（每个动作概率相等）
+        uniform_policy = [1.0 / num_actions] * num_actions
+
+        # 找到最优动作索引（对于均匀分布，可以选择第一个动作，或者根据随机整数选择）
+        # 为了显示初始策略，我们选择随机整数中最大的那个对应的动作
+        best_action_idx = max(range(num_actions), key=lambda i: policy_state[i])
+
+        policy_list.append(
+            {
+                "state_idx": state_idx,
+                "x": x,
+                "y": y,
+                "best_action_idx": best_action_idx,
+                "action": list(env.action_space[best_action_idx]),
+                "policy": uniform_policy,  # 返回均匀分布作为初始策略
+            }
+        )
 
     return jsonify(
         {
@@ -70,6 +98,11 @@ def init_env():
             "num_states": env.num_states,
             "num_actions": env.num_actions,
             "action_space": [list(a) for a in env.action_space],
+            "state_values": [float(v) for v in algorithm.state_values],
+            "policy": policy_list,
+            "action_values": [
+                [float(v) for v in row] for row in algorithm.action_values
+            ],
         }
     )
 
@@ -127,6 +160,76 @@ def run_value_iteration():
                 [float(v) for v in row] for row in algorithm.action_values
             ],
             "total_iterations": total_iterations,
+        }
+    )
+
+
+@app.route("/api/step_iteration", methods=["POST"])
+def step_iteration():
+    """执行一次迭代"""
+    global env, algorithm
+
+    if env is None or algorithm is None:
+        return jsonify({"error": "Environment not initialized"}), 400
+
+    # 检查算法是否有step_iteration方法
+    if not hasattr(algorithm, "step_iteration"):
+        return jsonify({"error": "Algorithm does not support step iteration"}), 400
+
+    # 执行一次迭代（捕获输出）
+    import io
+    import contextlib
+
+    f = io.StringIO()
+    with contextlib.redirect_stdout(f):
+        converged = algorithm.step_iteration()
+
+    # 转换策略和状态值为列表格式
+    policy_list = []
+    for state_idx in range(env.num_states):
+        x, y = env.state_idx_to_xy(state_idx)
+        # 找到最优动作索引
+        best_action_idx = 0
+        max_prob = algorithm.policy[state_idx][0]
+        for i, prob in enumerate(algorithm.policy[state_idx]):
+            if prob > max_prob:
+                max_prob = prob
+                best_action_idx = i
+        policy_list.append(
+            {
+                "state_idx": state_idx,
+                "x": x,
+                "y": y,
+                "best_action_idx": best_action_idx,
+                "action": list(env.action_space[best_action_idx]),
+                "policy": algorithm.policy[state_idx],
+            }
+        )
+
+    # 获取总迭代次数
+    total_iterations = (
+        len(algorithm.iteration_history)
+        if hasattr(algorithm, "iteration_history")
+        else 0
+    )
+
+    # 获取当前迭代次数
+    current_iteration = (
+        algorithm.current_iteration_num
+        if hasattr(algorithm, "current_iteration_num")
+        else total_iterations
+    )
+
+    return jsonify(
+        {
+            "state_values": [float(v) for v in algorithm.state_values],
+            "policy": policy_list,
+            "action_values": [
+                [float(v) for v in row] for row in algorithm.action_values
+            ],
+            "total_iterations": total_iterations,
+            "current_iteration": current_iteration,
+            "converged": converged,
         }
     )
 

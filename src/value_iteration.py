@@ -6,6 +6,55 @@ from iteration import Iteration
 class ValueIteration(Iteration):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.current_iteration_num = 0  # 当前迭代次数
+
+    def step_iteration(self):
+        """
+        执行一次迭代
+
+        Returns:
+            converged (bool): 是否收敛
+        """
+        # 如果是第一次迭代，清空历史记录
+        if self.current_iteration_num == 0:
+            self.iteration_history = []
+
+        # 检查是否超过最大迭代次数
+        if self.current_iteration_num >= self.max_iterations:
+            return True
+
+        # 计算每个 (s, a) 的 action value
+        for state in range(self.env.num_states):
+            for action in range(self.env.num_actions):
+                next_state, reward = self.env.get_next_state_and_reward(state, action)
+                # qk(s, a) = r(s, a) + gamma * V(s')
+                q_value = reward + self.gamma * self.state_values[next_state]
+                self.action_values[state][action] = q_value
+
+        old_state_values = copy.deepcopy(self.state_values)
+
+        # policy update
+        self.policy_update()
+
+        # value update
+        self.state_values = [max(action_values) for action_values in self.action_values]
+
+        # 增加迭代次数
+        self.current_iteration_num += 1
+
+        # 保存当前迭代的状态值和策略
+        self.add_iteration_history(
+            self.current_iteration_num,
+            self.state_values,
+            self.policy,
+            self.action_values,
+        )
+
+        # 检查是否收敛
+        converged = self.check_state_values_convergence(
+            old_state_values, self.state_values
+        )
+        return converged
 
     def iteration(self):
         """
@@ -13,6 +62,8 @@ class ValueIteration(Iteration):
         2. policy update: 在一个state下, 选择 action value 最大的 action
         3. value update
         """
+        # 重置迭代次数
+        self.current_iteration_num = 0
         # 清空历史记录
         self.iteration_history = []
 
@@ -35,9 +86,15 @@ class ValueIteration(Iteration):
                 max(action_values) for action_values in self.action_values
             ]
 
+            # 增加迭代次数
+            self.current_iteration_num += 1
+
             # 保存当前迭代的状态值和策略
             self.add_iteration_history(
-                iter_num + 1, self.state_values, self.policy, self.action_values
+                self.current_iteration_num,
+                self.state_values,
+                self.policy,
+                self.action_values,
             )
 
             if self.check_state_values_convergence(old_state_values, self.state_values):
@@ -47,8 +104,49 @@ class ValueIteration(Iteration):
 class PolicyIteration(Iteration):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.current_iteration_num = 0  # 当前迭代次数
+
+    def step_iteration(self):
+        """
+        执行一次迭代
+
+        Returns:
+            converged (bool): 是否收敛
+        """
+        # 如果是第一次迭代，清空历史记录
+        if self.current_iteration_num == 0:
+            self.iteration_history = []
+
+        # 检查是否超过最大迭代次数
+        if self.current_iteration_num >= self.max_iterations:
+            return True
+
+        old_state_values = copy.deepcopy(self.state_values)
+
+        # 策略评估
+        self.policy_evaluation()
+
+        # 策略改进
+        self.policy_improvement()
+
+        # 增加迭代次数
+        self.current_iteration_num += 1
+
+        # 保存当前迭代的状态值和策略
+        self.add_iteration_history(
+            self.current_iteration_num,
+            self.state_values,
+            self.policy,
+            self.action_values,
+        )
+
+        # 检查策略是否改变
+        converged = self.check_policy_convergence(old_state_values, self.state_values)
+        return converged
 
     def iteration(self):
+        # 重置迭代次数
+        self.current_iteration_num = 0
         self.iteration_history = []
 
         for iter_num in range(self.max_iterations):
@@ -60,9 +158,15 @@ class PolicyIteration(Iteration):
             # 策略改进
             self.policy_improvement()
 
+            # 增加迭代次数
+            self.current_iteration_num += 1
+
             # 保存当前迭代的状态值和策略
             self.add_iteration_history(
-                iter_num + 1, self.state_values, self.policy, self.action_values
+                self.current_iteration_num,
+                self.state_values,
+                self.policy,
+                self.action_values,
             )
 
             # 检查策略是否改变
